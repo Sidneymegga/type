@@ -51,8 +51,37 @@ EOF
 # Permissões de Execução
 chmod +x monitor.py
 
-# Criação da Cron Job
-echo "Criando a cron job..."
-(crontab -l 2>/dev/null; echo "*/2 * * * * /usr/bin/python3 $PWD/monitor.py >> $PWD/monitor_log.txt 2>&1") | crontab -
+# Remover a tarefa cron existente
+echo "Removendo a tarefa cron existente..."
+(crontab -l 2>/dev/null | grep -v "monitor.py" | crontab -) || true
+
+# Criar o arquivo de serviço do systemd
+echo "Criando o arquivo de serviço do systemd..."
+cat << EOF > /etc/systemd/system/monitor.service
+[Unit]
+Description=Monitor Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 $PWD/monitor.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Recarregar o daemon do systemd
+echo "Recarregando o daemon do systemd..."
+sudo systemctl daemon-reload
+
+# Iniciar o serviço do monitor
+echo "Iniciando o serviço do monitor..."
+sudo systemctl start monitor.service
+
+# Habilitar o serviço para iniciar na inicialização
+echo "Habilitando o serviço para iniciar na inicialização..."
+sudo systemctl enable monitor.service
 
 echo "Instalação e configuração concluídas com sucesso!"
