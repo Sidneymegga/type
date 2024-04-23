@@ -12,45 +12,39 @@ cat << EOF > monitor.py
 import psutil
 import time
 import datetime
+import os
 
-def monitor_and_restart_process(process_name, threshold_percent, interval, consecutive_checks):
-    checks_count = 0
+def monitor_and_restart_processes(threshold_percent, interval=60, max_processes=3):
     while True:
-        processes = [p for p in psutil.process_iter(['pid', 'name', 'cpu_percent']) if process_name in p.info['name']]
-        processes.sort(key=lambda x: x.info['cpu_percent'], reverse=True)  # Ordena por uso de CPU
+        # Obtém uma lista de todos os processos em execução ordenados por uso de CPU
+        all_processes = sorted(psutil.process_iter(['pid', 'name', 'cpu_percent']), key=lambda p: p.info['cpu_percent'], reverse=True)
 
-        for i, process in enumerate(processes[:3]):  # Mostra apenas os 3 processos com maior uso de CPU
-            print(f"Processo {process.info['name']} (PID: {process.info['pid']}) está consumindo {process.info['cpu_percent']:.1f}% de CPU.")
+        # Seleciona os três primeiros processos com maior uso de CPU
+        selected_processes = all_processes[:max_processes]
 
-        for process in processes:
+        # Verifica o uso de CPU de cada processo selecionado
+        for process in selected_processes:
             current_cpu_percent = process.info['cpu_percent']
+            print(f"Processo {process.info['name']} (PID: {process.info['pid']}) está consumindo {current_cpu_percent}% de CPU.")
             if current_cpu_percent > threshold_percent:
-                checks_count += 1
                 print(f"Excedeu o limite de uso de CPU de {threshold_percent}%.")
-                if checks_count == consecutive_checks:
-                    print(f"Processo {process.info['name']} reiniciado devido ao alto uso de CPU ({current_cpu_percent:.1f}%).")
-                    process.kill()  # Reinicia o processo
-                    checks_count = 0
-            else:
-                checks_count = 0
+                print(f"Reiniciando o processo {process.info['name']}...")
+                with open("monitor_log.txt", "a") as log_file:
+                    log_file.write(f"{datetime.datetime.now()} - Processo {process.info['name']} (PID: {process.info['pid']}) reiniciado devido a alto uso de CPU ({current_cpu_percent}%).\n")
+                try:
+                    os.kill(process.info['pid'], 9)  # Envia sinal SIGKILL (9) para o processo
+                    print(f"Processo reiniciado com sucesso.")
+                except Exception as e:
+                    print(f"Erro ao tentar reiniciar o processo {process.info['name']}: {e}")
 
+        # Aguarda o intervalo especificado antes de verificar novamente
         time.sleep(interval)
 
-# Define o nome do processo a ser monitorado
-process_name = input("Digite o nome do processo a ser monitorado: ")
+# Define o limite percentual de uso de CPU para reiniciar os processos (padrão: 95)
+threshold_percent = 95
 
-# Define o limite percentual de uso de CPU para reiniciar o processo
-threshold_percent = 95  # Limite de uso de CPU em %
-
-# Define o intervalo de verificação em segundos
-interval = 60  # Verifica a cada 60 segundos
-
-# Define o número de verificações consecutivas que devem exceder o limite de uso de CPU
-consecutive_checks = 2  # Verifica 2 vezes antes de reiniciar o processo
-
-# Inicia o monitoramento e reinício do processo
-monitor_and_restart_process(process_name, threshold_percent, interval, consecutive_checks)
-EOF
+# Inicia o monitoramento e reinício dos processos
+monitor_and_restart_processes(threshold_percent)
 
 # Permissões de Execução
 chmod +x monitor.py
