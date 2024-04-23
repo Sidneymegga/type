@@ -1,0 +1,62 @@
+#!/bin/bash
+
+# Instalação de Dependências
+echo "Instalando as dependências..."
+sudo apt update
+sudo apt install python3 python3-pip -y
+pip3 install psutil
+
+# Criação do Script de Monitoramento
+echo "Criando o script de monitoramento..."
+cat << EOF > monitor.py
+import psutil
+import time
+import datetime
+
+def monitor_and_restart_process(process_name, threshold_percent, interval, consecutive_checks):
+    checks_count = 0
+    while True:
+        processes = [p for p in psutil.process_iter(['pid', 'name', 'cpu_percent']) if process_name in p.info['name']]
+        processes.sort(key=lambda x: x.info['cpu_percent'], reverse=True)  # Ordena por uso de CPU
+
+        for i, process in enumerate(processes[:3]):  # Mostra apenas os 3 processos com maior uso de CPU
+            print(f"Processo {process.info['name']} (PID: {process.info['pid']}) está consumindo {process.info['cpu_percent']:.1f}% de CPU.")
+
+        for process in processes:
+            current_cpu_percent = process.info['cpu_percent']
+            if current_cpu_percent > threshold_percent:
+                checks_count += 1
+                print(f"Excedeu o limite de uso de CPU de {threshold_percent}%.")
+                if checks_count == consecutive_checks:
+                    print(f"Processo {process.info['name']} reiniciado devido ao alto uso de CPU ({current_cpu_percent:.1f}%).")
+                    process.kill()  # Reinicia o processo
+                    checks_count = 0
+            else:
+                checks_count = 0
+
+        time.sleep(interval)
+
+# Define o nome do processo a ser monitorado
+process_name = input("Digite o nome do processo a ser monitorado: ")
+
+# Define o limite percentual de uso de CPU para reiniciar o processo
+threshold_percent = 95  # Limite de uso de CPU em %
+
+# Define o intervalo de verificação em segundos
+interval = 60  # Verifica a cada 60 segundos
+
+# Define o número de verificações consecutivas que devem exceder o limite de uso de CPU
+consecutive_checks = 2  # Verifica 2 vezes antes de reiniciar o processo
+
+# Inicia o monitoramento e reinício do processo
+monitor_and_restart_process(process_name, threshold_percent, interval, consecutive_checks)
+EOF
+
+# Permissões de Execução
+chmod +x monitor.py
+
+# Criação da Cron Job
+echo "Criando a cron job..."
+(crontab -l 2>/dev/null; echo "*/2 * * * * /usr/bin/python3 $PWD/monitor.py >> $PWD/monitor_log.txt 2>&1") | crontab -
+
+echo "Instalação e configuração concluídas com sucesso!"
