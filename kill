@@ -46,6 +46,8 @@ threshold_percent = 95
 # Inicia o monitoramento e reinício dos processos
 monitor_and_restart_processes(threshold_percent)
 
+EOF
+
 # Permissões de Execução
 chmod +x monitor.py
 
